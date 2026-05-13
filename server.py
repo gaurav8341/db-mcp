@@ -2,12 +2,12 @@ import json
 import os
 import re
 
-import mysql.connector
 import yaml
 from mcp.server.fastmcp import FastMCP
 
+from clients import get_client
+
 CONFIG_PATH = os.path.expanduser("~/.config/db-mcp/config.yaml")
-ROW_LIMIT = 500
 
 WRITE_PATTERN = re.compile(
     r"^\s*(INSERT|UPDATE|DELETE|DROP|TRUNCATE|ALTER|CREATE|REPLACE|RENAME|GRANT|REVOKE)\b",
@@ -17,35 +17,10 @@ WRITE_PATTERN = re.compile(
 mcp = FastMCP("db-mcp")
 
 
-def load_config():
+def load_config() -> dict:
     with open(CONFIG_PATH) as f:
         raw = os.path.expandvars(f.read())
     return yaml.safe_load(raw)
-
-
-def run_mysql(cfg, query):
-    conn = mysql.connector.connect(
-        host=cfg["host"],
-        port=cfg.get("port", 3306),
-        user=cfg["user"],
-        password=cfg["password"],
-        database=cfg.get("database"),
-        connection_timeout=10,
-    )
-    try:
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute(query)
-        rows = cursor.fetchmany(ROW_LIMIT)
-        truncated = cursor.fetchone() is not None
-        cursor.close()
-        return rows, truncated
-    finally:
-        conn.close()
-
-
-RUNNERS = {
-    "mysql": run_mysql,
-}
 
 
 @mcp.tool()
@@ -57,7 +32,7 @@ def list_datasources() -> str:
         {
             "name": k,
             "type": v["type"],
-            "host": v.get("host", ""),
+            "host": v.get("host", v.get("url", "")),
             "database": v.get("database", ""),
         }
         for k, v in sources.items()
@@ -68,7 +43,7 @@ def list_datasources() -> str:
 @mcp.tool()
 def execute(datasource: str, query: str) -> str:
     """
-    Run a read-only SQL query on a named datasource. Results capped at 500 rows.
+    Run a read-only query on a named datasource. Results capped at 500 rows.
     Use list_datasources() to see available datasource names.
     """
     if WRITE_PATTERN.match(query):
@@ -78,18 +53,14 @@ def execute(datasource: str, query: str) -> str:
     sources = config.get("datasources", {})
 
     if datasource not in sources:
-        available = list(sources.keys())
-        return f"Error: unknown datasource '{datasource}'. Available: {available}"
+        return f"Error: unknown datasource '{datasource}'. Available: {list(sources)}"
 
-    ds = sources[datasource]
-    runner = RUNNERS.get(ds["type"])
-    if runner is None:
-        return f"Error: unsupported datasource type '{ds['type']}'"
+    with get_client(sources[datasource]) as client:
+        rows, truncated = client.execute(query)
 
-    rows, truncated = runner(ds, query)
-    out = {"rows": rows, "count": len(rows)}
+    out: dict = {"rows": rows, "count": len(rows)}
     if truncated:
-        out["warning"] = f"Results truncated at {ROW_LIMIT} rows. Add LIMIT to your query."
+        out["warning"] = "Results truncated at 500 rows. Add LIMIT to your query."
     return json.dumps(out, indent=2, default=str)
 
 
