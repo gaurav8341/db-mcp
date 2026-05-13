@@ -1,0 +1,16 @@
+datasources:
+  codex-prod:
+    type: mysql
+    host: <ec2-ip>
+    port: 3306
+    user: readonly
+    password: ${CODEX_PROD_DB_PASS}
+    database: codex
+
+  codex-staging:
+    type: mysql
+    host: <ec2-ip>
+    port: 3306
+    user: readonly
+    password: ${CODEX_STAGING_DB_PASS}
+    database: codex
