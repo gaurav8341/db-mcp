@@ -6,11 +6,13 @@ import yaml
 from mcp.server.fastmcp import FastMCP
 
 from clients import get_client
+from formatters import get_formatter
 
 CONFIG_PATH = os.path.expanduser("~/.config/db-mcp/config.yaml")
 
 WRITE_PATTERN = re.compile(
-    r"^\s*(INSERT|UPDATE|DELETE|DROP|TRUNCATE|ALTER|CREATE|REPLACE|RENAME|GRANT|REVOKE)\b",
+    r"^\s*(INSERT|UPDATE|DELETE|DROP|TRUNCATE|ALTER|CREATE"
+    r"|REPLACE|RENAME|GRANT|REVOKE)\b",
     re.IGNORECASE,
 )
 
@@ -21,6 +23,11 @@ def load_config() -> dict:
     with open(CONFIG_PATH) as f:
         raw = os.path.expandvars(f.read())
     return yaml.safe_load(raw)
+
+
+def _get_source(datasource: str) -> dict | None:
+    sources = load_config().get("datasources", {})
+    return sources.get(datasource), list(sources.keys())
 
 
 @mcp.tool()
@@ -49,19 +56,54 @@ def execute(datasource: str, query: str) -> str:
     if WRITE_PATTERN.match(query):
         return "Error: write queries are not allowed"
 
-    config = load_config()
-    sources = config.get("datasources", {})
+    cfg, available = _get_source(datasource)
+    if cfg is None:
+        return f"Error: unknown datasource '{datasource}'. Available: {available}"
 
-    if datasource not in sources:
-        return f"Error: unknown datasource '{datasource}'. Available: {list(sources)}"
-
-    with get_client(sources[datasource]) as client:
+    with get_client(cfg) as client:
         rows, truncated = client.execute(query)
 
     out: dict = {"rows": rows, "count": len(rows)}
     if truncated:
         out["warning"] = "Results truncated at 500 rows. Add LIMIT to your query."
     return json.dumps(out, indent=2, default=str)
+
+
+@mcp.tool()
+def export(datasource: str, query: str, fmt: str, path: str) -> str:
+    """
+    Run a read-only query and save output to a file.
+    fmt: 'json' or 'markdown' (or 'md').
+    path: absolute file path to write (e.g. /tmp/results.md).
+    """
+    if WRITE_PATTERN.match(query):
+        return "Error: write queries are not allowed"
+
+    cfg, available = _get_source(datasource)
+    if cfg is None:
+        return f"Error: unknown datasource '{datasource}'. Available: {available}"
+
+    try:
+        formatter = get_formatter(fmt)
+    except ValueError as e:
+        return f"Error: {e}"
+
+    with get_client(cfg) as client:
+        rows, truncated = client.execute(query)
+
+    meta = {
+        "datasource": datasource,
+        "query": query,
+        "truncated": truncated,
+    }
+    content = formatter.format(rows, meta)
+
+    output_path = os.path.expanduser(path)
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+    with open(output_path, "w") as f:
+        f.write(content)
+
+    return f"Saved {len(rows)} rows to {output_path}"
 
 
 if __name__ == "__main__":
