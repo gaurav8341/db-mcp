@@ -23,6 +23,8 @@ Results are capped at 500 rows — add a `LIMIT` clause for large tables.
 | Type | Status |
 |------|--------|
 | MySQL | ✅ |
+| MongoDB | ✅ (query is JSON: `{"collection": "x", "filter": {...}, "limit": 10}` or `{"collection": "x", "pipeline": [...]}`; `$out`/`$merge` blocked) |
+| ClickHouse | ✅ (SQL; connection opened with `readonly=1`) |
 | Redash | planned |
 | Metabase | planned |
 

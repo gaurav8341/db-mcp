@@ -7,4 +7,6 @@ dependencies = [
     "mysql-connector-python>=9.6.0",
     "httpx>=0.28.0",
     "pyyaml>=6.0",
+    "pymongo>=4.10.0",
+    "clickhouse-connect>=0.8.0",
 ]

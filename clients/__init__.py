@@ -1,10 +1,14 @@
 from .base import BaseClient
+from .clickhouse import ClickHouseClient
 from .metabase import MetabaseClient
+from .mongo import MongoDBClient
 from .mysql import MySQLClient
 from .redash import RedashClient
 
 REGISTRY: dict[str, type[BaseClient]] = {
     "mysql": MySQLClient,
+    "mongodb": MongoDBClient,
+    "clickhouse": ClickHouseClient,
     "redash": RedashClient,
     "metabase": MetabaseClient,
 }

@@ -14,3 +14,18 @@ datasources:
     user: readonly
     password: ${CODEX_STAGING_DB_PASS}
     database: codex
+
+  mongo-prod:
+    type: mongodb
+    uri: mongodb://readonly:${MONGO_PROD_PASS}@<host>:27017/?authSource=admin
+    database: <db>
+    # query is JSON: {"collection": "x", "filter": {...}, "limit": 10}
+    #            or: {"collection": "x", "pipeline": [{"$match": {...}}]}
+
+  clickhouse-prod:
+    type: clickhouse
+    host: <host>
+    port: 8123
+    user: readonly
+    password: ${CLICKHOUSE_PROD_PASS}
+    database: default
